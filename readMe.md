@@ -192,15 +192,262 @@ Server模式下虚拟机中首选新生代收集器，除了Serial收集器外�
 
 
 
+## 认识GC日志
+
+每一种收集器的日志形式都是由它们自身的实现所决定的,换而言之,每个收集器的日志格式都可以不一样。但虚拟机设计者为了方便用户阅读,将各个收集器的日志都维持一定的共性,例如以下两段典型的GC日志:
+
+```
+0.139: [GC [PSYoungGen: 6041K->4728K(37376K)] 6041K->4728K(122368K), 0.0160554 secs] [Times: user=0.03 sys=0.00, real=0.02 secs] 
+0.155: [Full GC [PSYoungGen: 4728K->0K(37376K)] [ParOldGen: 0K->4628K(84992K)] 4728K->4628K(122368K) [PSPermGen: 3076K->3075K(21504K)], 0.0238742 secs] [Times: user=0.03 sys=0.03, real=0.02 secs]  
+
+```
+
+1. 前面的数字（0.139、0.155）代表GC发生的时间，这个数字的含义是从Java虚拟机启动以来经过的秒数。
+2. GC日志开头的“GC和Full GC”说明了这次垃圾收集的停顿类型，而不是用来区分新生代还是老年代GC的，如果有“Full”，说明这次GC是发生了“Stop-The-World”的
+3. [PSYoungGen、“DefNew”、"Tenured"、“Perm”]表示GC发生的区域，这里显示的区域名称与使用的GC收集器是密切相关的，例如当前所使用的“Parallel Scavenge收集器，那配套新生代为”PSYoungGen“，老年代和永久代同理，名称也是由收集器决定的。
+4. 方括号内部“6041K->4728K(37376K)”含义是“GC前该内存区域已使用容量-->GC后该内存区域已使用容量（该内存区域总容量）”。而在方括号之外的"6041K->4728K(122368K)"表示GC前Java堆已使用容量-->GC后Java堆已使用容量（Java堆总容量）
+5. 再往后“0.0160554 secs”表示该内存区域GC所占用的时间，单位是秒。
 
 
 
+## 对象分配测试示例
 
+### 1、对象优先在Eden区分配
 
+```java
+/**
+ * 描述类作用
+ * <p>
+ * VM Args:-XX:+UseSerialGC -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails
+ * <p>
+ * -XX:+UseSerialGC：使用串行带线程收集器
+ * <p>
+ * -verbose:gc：在输出设备上显示虚拟机垃圾收集信息
+ * <p>
+ * -Xms20M -Xmx20M :控制java堆内存大小为20M
+ * <p>
+ * -Xmn10M：分配10兆给新生代,剩余10M老年代
+ * <p>
+ * -XX:+PrintGCDetails：详细输出GC日志
+ * <p>
+ * <p>
+ * 此时java堆内存（新生代[8兆eden，1兆S0区，1兆S1区]）10M+（老年代）10M
+ * <p>
+ * 因此新生代可用空间为8+1=9M
+ *
+ * @author xym
+ */
+public class TestMain {
+    //1兆
+    private static final int _1MB = 2 << 19;
 
+    public static void main(String[] args) {
+        byte[] allocation1, allocation2, allocation3, allocation4;
+        allocation1 = new byte[2 * _1MB];
+        allocation2 = new byte[2 * _1MB];
+        allocation3 = new byte[2 * _1MB];
+        //出现一次minor GC
+        allocation4 = new byte[4 * _1MB];
+    }
+}
 
+```
 
+执行后结果为：
 
+```
+
+[GC[DefNew: 7506K->532K(9216K), 0.0064196 secs] 7506K->6677K(19456K), 0.0064722 secs] [Times: user=0.00 sys=0.02, real=0.01 secs] 
+Heap
+ def new generation   total 9216K, used 4958K [0x00000000f9a00000, 0x00000000fa400000, 0x00000000fa400000)
+  eden space 8192K,  54% used [0x00000000f9a00000, 0x00000000f9e526c8, 0x00000000fa200000)
+  from space 1024K,  52% used [0x00000000fa300000, 0x00000000fa3853d0, 0x00000000fa400000)
+  to   space 1024K,   0% used [0x00000000fa200000, 0x00000000fa200000, 0x00000000fa300000)
+ tenured generation   total 10240K, used 6144K [0x00000000fa400000, 0x00000000fae00000, 0x00000000fae00000)
+   the space 10240K,  60% used [0x00000000fa400000, 0x00000000faa00030, 0x00000000faa00200, 0x00000000fae00000)
+ compacting perm gen  total 21248K, used 2991K [0x00000000fae00000, 0x00000000fc2c0000, 0x0000000100000000)
+   the space 21248K,  14% used [0x00000000fae00000, 0x00000000fb0ebdc0, 0x00000000fb0ebe00, 0x00000000fc2c0000)
+
+-----------------------------------------------------------------------------------------
+1、DefNew表示采用的串行收集器生效，7506K->532K(9216K)表明年轻代回收的效果很给力，7506K->6677K(19456K)，堆内存回收效果最终还是不理想，说明垃圾没怎么被回收，还是存再堆内存的老年代中。
+
+2、eden space 8192K（8M）, from space 1024K（1M）,to   space 1024K（1M）,刚好和我们分析的一致。
+
+3、tenured generation the space 10240K，60% used说明老年代空间大小为10M，且被占用了60%
+
+4、当为allocation4分配4m内存空间时，此刻年轻代eden存放了allocation1，allocation2，allocation3共消耗6M内存此时，eden剩余空间=（8-6=2M），s0=s1=1M，这时他们都容不下4M，此时引发GC，GC发生后，因s区容纳不下6M，3个对象都会转移至老年代。此时老年代被占用6兆，也即是60%，eden区腾出来的空间容纳当前4M的allocation4
+
+```
+
+### 2、大对象直接在老年代分配
+
+```
+**
+ * <p>
+ * VM Args:-XX:+UseSerialGC -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -     
+ *  XX:SurvivorRatio=8 -XX:PretenureSizeThreshold=3145728
+ * <p>
+ * -XX:+UseSerialGC：使用串行带线程收集器
+ * <p>
+ * -verbose:gc：在输出设备上显示虚拟机垃圾收集信息
+ * <p>
+ * -Xms20M -Xmx20M :控制java堆内存大小为20M
+ * <p>
+ * -Xmn10M：分配10兆给新生代
+ * <p>
+ * -XX:+PrintGCDetails：详细输出GC日志
+ * <p>
+ * -XX:SurvivorRatio=8：Eden区和Survivor区域的容量比值为8:1
+ *<p>
+ *  -XX:PretenureSizeThreshold=3145728：大于3M的对象将直接在老年代分配
+ * <p>
+ * 此时java堆内存（新生代[8兆eden，1兆S0区，1兆S1区]）10M+（老年代）10M
+ * <p>
+ * 新生代可用空间为8+1=9M
+ *
+ * @author xym
+ * @create 2018-07-21 18:20
+ */
+public static void main(String[] args) {
+        //testAllocation();
+        byte[] allocation = new byte[4 * _1MB];
+}
+```
+
+执行结果：
+
+```
+Heap
+ def new generation   total 9216K, used 1526K [0x00000000f9a00000, 0x00000000fa400000, 0x00000000fa400000)
+  eden space 8192K,  18% used [0x00000000f9a00000, 0x00000000f9b7d9c8, 0x00000000fa200000)
+  from space 1024K,   0% used [0x00000000fa200000, 0x00000000fa200000, 0x00000000fa300000)
+  to   space 1024K,   0% used [0x00000000fa300000, 0x00000000fa300000, 0x00000000fa400000)
+ tenured generation   total 10240K, used 4096K [0x00000000fa400000, 0x00000000fae00000, 0x00000000fae00000)
+   the space 10240K,  40% used [0x00000000fa400000, 0x00000000fa800010, 0x00000000fa800200, 0x00000000fae00000)
+ compacting perm gen  total 21248K, used 2946K [0x00000000fae00000, 0x00000000fc2c0000, 0x0000000100000000)
+   the space 21248K,  13% used [0x00000000fae00000, 0x00000000fb0e0e18, 0x00000000fb0e1000, 0x00000000fc2c0000)
+   
+1、tenured generation   total 10240K, used 4096K，40% used，表明4M的对象直接分配在老年代中
+```
+
+### 3、长期存活的对象将进入老年代
+
+```
+//-XX:+UseSerialGC -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=1
+//MaxTenuringThreshold:晋升到老年代的对象年龄,当超过指定年龄后对象会进入老年代
+
+public static void main(String[] args) {
+        //testAllocation();
+        //testPretenureSizeThreshold();
+        byte[] allocation1, allocation2, allocation3;
+        allocation1 = new byte[_1MB / 4];
+        allocation2 = new byte[4 * _1MB];
+        allocation3 = new byte[4 * _1MB];
+        allocation3 = null;
+        allocation3 = new byte[4 * _1MB];
+ }
+```
+
+执行结果
+
+```
+[GC[DefNew: 5878K->783K(9216K), 0.0058853 secs] 5878K->4879K(19456K), 0.0059248 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
+[GC[DefNew: 4879K->0K(9216K), 0.0023356 secs] 8975K->4879K(19456K), 0.0023621 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+Heap
+ def new generation   total 9216K, used 4346K [0x00000000f9a00000, 0x00000000fa400000, 0x00000000fa400000)
+  eden space 8192K,  53% used [0x00000000f9a00000, 0x00000000f9e3ea30, 0x00000000fa200000)
+  from space 1024K,   0% used [0x00000000fa200000, 0x00000000fa200000, 0x00000000fa300000)
+  to   space 1024K,   0% used [0x00000000fa300000, 0x00000000fa300000, 0x00000000fa400000)
+ tenured generation   total 10240K, used 4879K [0x00000000fa400000, 0x00000000fae00000, 0x00000000fae00000)
+   the space 10240K,  47% used [0x00000000fa400000, 0x00000000fa8c3c50, 0x00000000fa8c3e00, 0x00000000fae00000)
+ compacting perm gen  total 21248K, used 2937K [0x00000000fae00000, 0x00000000fc2c0000, 0x0000000100000000)
+   the space 21248K,  13% used [0x00000000fae00000, 0x00000000fb0de748, 0x00000000fb0de800, 0x00000000fc2c0000)
+   
+```
+
+## Sun JDK监控和故障处理命令行工具
+
+| 名称   | 主要作用                                                     |
+| ------ | ------------------------------------------------------------ |
+| jps    | JVM Process Status Tool,显示指定系统内所有的 Hotspot虚拟机进程 |
+| jstat  | JVM Statistics Monitoring Tool,用于收集 Hotspot虚拟机各方面的运行数据 |
+| jinfo  | Configuration Info for Java,显示示虚拟机配置信息             |
+| jmap   | Memory Map for Java,生成虚拟机的内存转储快照( heapdump文件） |
+| jhat   | JVM Heap Dump Browser,用于分析heapdump文件,它会建立一个HTTP/HTML服务器,让用户可以在浏览器上查看分析结果 |
+| jstack | Stack Trace for Java,显示虚拟机的线程快照                    |
+
+### 1、jps：虚拟机进程状况工具
+
+`jps [-q] [-mlvV] [<hostid>]`
+
+***jps主要选项***
+
+| 选项 | 作用                                              |
+| ---- | ------------------------------------------------- |
+| -q   | 只输出 LVMID,省略主类的名称                       |
+| -m   | 输出虚拟机进程启动时传递给主类 main（）函数的参数 |
+| -l   | 输出主类的全名,如果进程执行的是Jar包,输出Jar路径  |
+| -v   | 输出虚拟机进程启动时JVM参数                       |
+
+###2、jstat：虚拟机统计信息监视工具
+
+`jstat -<option> [-t] [-h<lines>] <vmid> [<interval> [<count>]]`
+
+选项代表着用户希望查询的虚拟机信息，只要分为3类：类装载、垃圾收集、运行期编译状况
+
+| 选项              | 作用                                                         |
+| ----------------- | ------------------------------------------------------------ |
+| -class            | 监视类装载、卸载数量、总空间以及类装载所耗费的时间           |
+| -gc               | 监视Java堆状况,包括Eden区、两个 survivor区、老年代、永久代等的容量、已用空间、GC时间合计等信息 |
+| -gccapacity       | 监视内容与-gc基本相同,但输出主要关注Java堆各个区域使用到的最大、最小空间 |
+| -gcutil           | 监视内容与-gc基本相相同,但输出主要关注已使用空间占总空间的百分比 |
+| -gccause          | 与- gcutil功能一样,但是会额外输出导致上一次GC产生的原因      |
+| -gcnew            | 监视新生代GC状况                                             |
+| -gcnewcapacity    | 监视内容与- gcnew基本相同,输出主要关注使用到的最大、最小空间 |
+| -gcold            | 监视老年代GC状况                                             |
+| -gcoldcapacity    | 监视内容与- gcold基本相同,输出主要关注使用到的最大、最小空间 |
+| -gcpermcapacity   | 输出水久代使用到的最大、最小空间                             |
+| -compiler         | 输出JⅡT编编译器编译过的方法、耗时等信息                      |
+| -printcompilation | 输出已经被JⅡT编译的方法                                      |
+
+### 3、jinfo：java配置信息工具
+
+`jinfo [option] <pid>`
+
+Jnfo( Configuration Info for Java)的作用是实时地查看和调整虚拟机各项参数。主要显示系统默认参数
+
+### 4、jmap：java内存映像工具
+
+`jmap [option] <pid>`
+
+***jmap工具主要选项***
+
+| 选项           | 作用                                                         |
+| -------------- | ------------------------------------------------------------ |
+| -dump          | 生成ava堆转储快照。格式为:dump[live,] format=b,file=< filename>,其中live子参数说明是否只dump出存活的对象 |
+| -heap          | 显示Java堆详细信息,如使用哪种回收器、参数配置、分代状况等。只在 Linux/ Solaris平台下有效 |
+| -histo         | 显示堆中对象统计信息,包括类、实例数量、合计容量              |
+| -permstat      | 以 Classloader为统计口径显示永久代内存状态。只在 Linux/Solaris平台下有效 |
+| -F             | 当虚拟机进程对-dump选项没有响应时,可使用这个选项强制生成dump快照。只在 Linux/ Solaris平台下有效 |
+| -finalizerinfo | 显示在F- Queue中等待 Finalizer线程执行 finalize方法的对象。只在 Linux/ Solaris平台下有效 |
+
+### 5、jstack：java堆栈跟踪工具
+
+`jstack [-l] <pid>`
+
+***jstack工具主要选项***
+
+| 选项 | 作用                                        |
+| ---- | ------------------------------------------- |
+| -F   | 当正常输出的请求不被响应时,强制输出线程堆栈 |
+| -l   | 除堆栈外,显示关于锁的附加信息               |
+| -m   | 如果调用到本地方法的话,可以显示C/C++的堆栈  |
+
+## 图形化分析工具
+
+### 1、JConsole：Java监视与管理控制台
+
+### 2、VisualVM：多合一故障处理工具
 
 
 
