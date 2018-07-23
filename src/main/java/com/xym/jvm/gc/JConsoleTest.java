@@ -21,7 +21,7 @@ public class JConsoleTest {
         List<OOMObject> objects = new ArrayList<>();
         for (int i = 0; i < num; i++) {
             //稍微延迟一下，让监控曲线更加明显
-            TimeUnit.MILLISECONDS.sleep(500);
+            TimeUnit.MILLISECONDS.sleep(50);
             objects.add(new OOMObject());
         }
         System.out.println("--over!");
