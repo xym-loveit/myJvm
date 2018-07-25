@@ -195,6 +195,44 @@ Server模式下虚拟机中首选新生代收集器，除了Serial收集器外�
 * `-X`非标准参数，每个jvm实现都不同
 * `-XX`不稳定参数，下一个版本可能会取消
 
+
+
+***Java虚拟机参数***
+
+| 参数                                 | 描述                                                         |
+| ------------------------------------ | ------------------------------------------------------------ |
+| -XX: +PrintGC                        | 简短输出gc日志                                               |
+| -XX: +PrintGCDetails                 | 详细打印gc日志                                               |
+| -XX: +PrintHeapAtGC                  | GC时打印堆信息                                               |
+| -XX: +PrintGCTimeStamps              | GC时候打印发生时间                                           |
+| -XX:PrintGCApplicationConcurrentTime | 打印应用程序执行时间                                         |
+| -XX:PrintGCApplicationStoppedTime    | 打印应用程序由于GC而产生的停顿时间                           |
+| -XX:PrintReferenceGC                 | GC时跟踪系统内的软引用、弱引用、虚引用和Finallize队列回收情况 |
+| -Xloggc                              | gc执行时输出到日志文件                                       |
+| -verbose:class                       | 跟踪类的加载和卸载                                           |
+| -XX:+TraceClassLoading               | 单独跟踪类的加载                                             |
+| -XX:+TraceClassUnLoading             | 单独跟踪类的卸载                                             |
+| -XX:+PrintClassHistogram             | 现在当前加载类的信息柱状图，通过该柱状图信息，可以看到系统中占用空间最多的对象，以及其实例数量和空间大小 |
+| -XX:PrintVMOptions                   | 打印虚拟机接收到的命令行显示参数                             |
+| -XX:PrintCommandLineFlags            | 打印传递给虚拟机的显示和隐式参数，隐式参数未必是通过命令行直接给出的，它可能是由虚拟机启动时自行设置的 |
+| -XX:+PrintFlagsFinal                 | 打印所有的系统参数的值（输出会很多）                         |
+| -Xms                                 | jvm堆内存初始大小                                            |
+| -Xmx                                 | jvm堆内存最大大小                                            |
+| -Xmn                                 | 新生代内存大小，一般设置为整个堆内存的1/3到1/4左右           |
+| -XX:SurvivorRatio                    | 设置新生代中eden空间和from/to空间的比例关系，含义：-XX:SurvivorRatio=eden/from=eden/to |
+| -XX:NewRatio                         | 设置新生代和老年代的比例，含义为：-XX:NewRatio=老年代/新生代 |
+| -XX:HeapDumpOnOutOfMemoryError       | 内存溢出时导出整个堆信息（除了可以导出堆信息，还可以指定一个脚本文件，该文件可以用于奔溃程序的自救、报警、或者通知） |
+| -XX:HeapDumpPath                     | 指定导出堆的存放路径（MAT分析）                              |
+| -XX:PermSize                         | 初始永久区大小                                               |
+| -XX:MaxPermSize                      | 最大永久区大小                                               |
+| -XX:MaxMetaspaceSize                 | 指定永久区最大可用大小（jdk1.8+）                            |
+| -Xss                                 | jvm栈空间大小                                                |
+| -XX:MaxDirectMemorySize              | 最大可用直接内存大小（如不设置，默认值为最大堆空间，即为-Xmx） |
+|                                      |                                                              |
+|                                      |                                                              |
+
+
+
 ## 认识GC日志
 
 每一种收集器的日志形式都是由它们自身的实现所决定的,换而言之,每个收集器的日志格式都可以不一样。但虚拟机设计者为了方便用户阅读,将各个收集器的日志都维持一定的共性,例如以下两段典型的GC日志:
