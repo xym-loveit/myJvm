@@ -190,7 +190,10 @@ Server模式下虚拟机中首选新生代收集器，除了Serial收集器外�
 | UseCMSCompactatFullCollection  | 设置CMS收集器在完成垃圾收集后是否要进行一次内存碎片整理。仅在使用CMS收集器时生效 |
 | CMSFullGCsBeforeCompaction     | 设置CMS收集器在进行若干次垃圾收集后再启动一次内存碎片整理仅在使用CMS收集集器时生效 |
 
-
+## JVM参数
+* `-`标准参数，所有jvm都应该支持
+* `-X`非标准参数，每个jvm实现都不同
+* `-XX`不稳定参数，下一个版本可能会取消
 
 ## 认识GC日志
 
@@ -450,4 +453,33 @@ Jnfo( Configuration Info for Java)的作用是实时地查看和调整虚拟机�
 ### 2、VisualVM：多合一故障处理工具
 
 
+
+## Class类文件的结构
+
+根据 Java虚拟机规范的规定，Class文件格式采用一种类似于C语言结构体的伪结构来存储数据，这种伪结构中只有二种数据类型：无符号数和表。
+
+无符号数属于基本的数据类型，以u1、u2、u4、u8来分别代表1个字节、2个字节、4个字节、8个字节的无符号数，无符号数可以用来描述数字、索引引用、数量值或者按照UTF-8编码构成字符串值。
+
+表是由多个无符号数或者其他表作为数据项构成的复合数据类型，所有表都习惯地以"_info"结构。表用于描述有层次关系的复合结构的数据，整个Class文件本质上就是一张表。
+
+***Class文件格式***
+
+| 类型           | 名称                | 数量                   |
+| -------------- | ------------------- | ---------------------- |
+| u4             | magic               | 1                      |
+| u2             | minor version       | 1                      |
+| u2             | major version       | 1                      |
+| u2             | constant pool count | 1                      |
+| cp_info        | constant pool       | constant_pool _count-l |
+| u2             | access_flags        | 1                      |
+| u2             | this_class          | 1                      |
+| u2             | super_clsss         | 1                      |
+| u2             | interfaces_count    | 1                      |
+| u2             | interfaces          | interfaces_count       |
+| u2             | fields_count        | 1                      |
+| field_info     | fields              | fields_count           |
+| u2             | methods_count       | 1                      |
+| method_info    | methods             | methods_count          |
+| u2             | attbributes_count   | 1                      |
+| attribute_info | attbributes         | attbributes_count      |
 
