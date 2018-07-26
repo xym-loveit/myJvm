@@ -228,7 +228,13 @@ Server模式下虚拟机中首选新生代收集器，除了Serial收集器外�
 | -XX:MaxMetaspaceSize                 | 指定永久区最大可用大小（jdk1.8+）                            |
 | -Xss                                 | jvm栈空间大小                                                |
 | -XX:MaxDirectMemorySize              | 最大可用直接内存大小（如不设置，默认值为最大堆空间，即为-Xmx） |
-|                                      |                                                              |
+| -XX:+DisableExplicitGC               | 是否禁用手动触发GC（System.gc()）                            |
+| -XX:+ExplicitGCInvokesConcurrent     | System.gc()默认非并发方式，使用并发方式进行显示GC的回收      |
+| -XX:ScavengeBeforeFullGC             | 在并行GC前（Full GC）额外触发一次新生代GC（默认值为true）    |
+| -XX:+UseTLAB                         | 开启TLAB分配                                                 |
+| -XX:+PrintTLAB                       | 打印TLAB相关分配                                             |
+| -XX:TLABSize                         | 设置TLAB大小                                                 |
+| -XX:+ResizeTLAB                      | 自动调整TLAB大小                                             |
 |                                      |                                                              |
 
 
@@ -484,11 +490,156 @@ Jnfo( Configuration Info for Java)的作用是实时地查看和调整虚拟机�
 | -l   | 除堆栈外,显示关于锁的附加信息               |
 | -m   | 如果调用到本地方法的话,可以显示C/C++的堆栈  |
 
+### 6、jstatd：远程主机信息收集
+
+### 7、jcmd：多功能命令行（jdk1.7+支持）
+
+jdk1.7以后，新增了一个命令行工具jcmd，它是一个多功能的工具，可以用它来导出堆、查看java进程、导出线程信息，执行GC等。
+
+* `jcmd -l`列出所有的java虚拟机
+* `jcmd pid help`列出虚拟机所支持的命令
+
+```
+//罗列了进程号为4856虚拟机所支持的jcmd命令操作
+C:\Users\xxx>jcmd 4856 help
+4856:
+The following commands are available:
+VM.native_memory
+ManagementAgent.stop
+ManagementAgent.start_local
+ManagementAgent.start
+GC.rotate_log
+Thread.print
+GC.class_stats
+GC.class_histogram
+GC.heap_dump
+GC.run_finalization
+GC.run
+VM.uptime
+VM.flags
+VM.system_properties
+VM.command_line
+VM.version
+help
+
+For more information about a specific command use 'help <command>'.
+```
+
+* 查看虚拟机启动时间
+
+```
+C:\Users\xxx>jcmd 4856 VM.uptime
+4856:
+909.807 s
+```
+
+命令jcmd也支持直接使用MainClass的名字来代替进程号，这样在编写脚本时也更容易：
+
+```
+C:\Users\xxx>jcmd org.jetbrains.idea.maven.server.RemoteMavenServer VM.uptime
+4856:
+1078.390 s
+```
+
+* 打印线程栈信息
+
+```
+C:\Users\xxx>jcmd 4856 Thread.print
+4856:
+2018-07-27 00:15:19
+Full thread dump OpenJDK 64-Bit Server VM (25.152-b39 mixed mode):
+
+"RMI TCP Connection(7)-127.0.0.1" #24 daemon prio=5 os_prio=0 tid=0x0000000057ff
+8800 nid=0x1a38 runnable [0x0000000056f2e000]
+   java.lang.Thread.State: RUNNABLE
+        at java.net.SocketInputStream.socketRead0(Native Method)
+        at java.net.SocketInputStream.socketRead(SocketInputStream.java:116)
+        at java.net.SocketInputStream.read(SocketInputStream.java:171)
+        at java.net.SocketInputStream.read(SocketInputStream.java:141)
+        at java.io.BufferedInputStream.fill(BufferedInputStream.java:246)
+        at java.io.BufferedInputStream.read(BufferedInputStream.java:265)
+        - locked <0x00000000f06769a8> (a java.io.BufferedInputStream)
+        at java.io.FilterInputStream.read(FilterInputStream.java:83)
+        at sun.rmi.transport.tcp.TCPTransport.handleMessages(TCPTransport.java:5
+       
+       ...
+```
+
+* 查看系统中类的统计信息
+
+`jcmd 4856 GC.class_histogram`
+
+* 导出堆信息
+
+```
+C:\Users\xxx>jcmd 4856 GC.heap_dump d:/d.dump
+4856:
+Heap dump file created
+```
+
+* 获得系统的Properties内容
+
+`jcmd 4856 VM.system_properties`
+
+* 获得启动参数
+
+```
+C:\Users\xxx>jcmd 4856 VM.flags
+4856:
+-XX:CICompilerCount=3 -XX:InitialHeapSize=132120576 -XX:MaxHeapSize=805306368 -X
+X:MaxNewSize=268435456 -XX:MinHeapDeltaBytes=524288 -XX:NewSize=44040192 -XX:Old
+Size=88080384 -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:-UseLar
+gePagesIndividualAllocation -XX:+UseParallelGC
+```
+
+* 获得所有性能统计相关数据
+
+### 8、hprof：性能统计工具
+
+```
+
+C:\Users\xxx>java -agentlib:hprof=help
+
+     HPROF: Heap and CPU Profiling Agent (JVMTI Demonstration Code)
+
+hprof usage: java -agentlib:hprof=[help]|[<option>=<value>, ...]
+
+Option Name and Value  Description                    Default
+---------------------  -----------                    -------
+heap=dump|sites|all    heap profiling                 all
+cpu=samples|times|old  CPU usage                      off
+monitor=y|n            monitor contention             n
+format=a|b             text(txt) or binary output     a
+file=<file>            write data to file             java.hprof[{.txt}]
+net=<host>:<port>      send data over a socket        off
+depth=<size>           stack trace depth              4
+interval=<ms>          sample interval in ms          10
+cutoff=<value>         output cutoff point            0.0001
+lineno=y|n             line number in traces?         y
+thread=y|n             thread in traces?              n
+doe=y|n                dump on exit?                  y
+msa=y|n                Solaris micro state accounting n
+force=y|n              force output to <file>         y
+verbose=y|n            print messages about dumps     y
+```
+
+
+
+
+
+
+
+
+
 ## 图形化分析工具
 
 ### 1、JConsole：Java监视与管理控制台
 
 ### 2、VisualVM：多合一故障处理工具
+
+### 3、BTrace：不停机监控应用（方法调用、系统内存）
+
+###4、Mission Control:虚拟机诊断工具(来自JRockit)
 
 
 
@@ -520,4 +671,20 @@ Jnfo( Configuration Info for Java)的作用是实时地查看和调整虚拟机�
 | method_info    | methods             | methods_count          |
 | u2             | attbributes_count   | 1                      |
 | attribute_info | attbributes         | attbributes_count      |
+
+
+
+## Linux下性能监控工具
+
+### 1、系统整体资源使用情况--top命令
+
+### 2、监控内存和CPU--vmstat命令
+
+### 3、监控IO使用--iostat命令
+
+### 4、多功能诊断器--pidstat工具（cpu/io/内存）
+
+* 可以定位问题到线程级
+
+
 

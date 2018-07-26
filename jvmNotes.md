@@ -64,8 +64,37 @@
     * 内存压缩整理`-XX:+UseCMSCompactAtFullCollection`，使CMS在垃圾收集完成后，进行一次内存碎片整理，内存碎片整理不是并发的。`-XX:CMSFullGCsBeforeCompaction`参数可以用于设定多少次CMS回收后，进行一次内存压缩。
     * 如果需要回收Perm区，配置`-XX:+CMSClassUnloadingEnabled`,如果条件允许，那么系统会使用CMS的机制回收Perm区的Class数据。
 
+### 9、G1（GarBage-First）回收器
+
+* ***并行性***：G1在回收期间，可以由多个GC线程同时工作，有效利用多核计算力。
+* ***并发性***：G1拥有与应用程序交替执行的能力，部分工作可以和应用程序同时执行，因此一般来说，不会在整个回收期间完全阻塞应用程序
+* ***分代GC***：G1依然是一个分代收集器，但是和之前回收器不同，它同时兼顾年轻代和老年代。对比其他回收器，它们或者工作在年轻代，或者工作在老年代。
+* ***空间整理***：G1在回收过程中，会进行适当的对象移动。不像CMS，只是简单地标记清理对象，在若干次GC后，CMS必须进行一次碎片整理。而G1不同，它每次回收都会有效地复制对象，减少空间碎片。
+* ***可预见性***：由于分区的原因，G1可以只选取部分区域进行内存回收，这样缩小了回收的范围，因此对于全局停顿也能得到较好的控制。
+
+
+
+G1的收集过程有4个阶段：
+
+* 新生代GC
+
+  * 新生代GC的主要工作是回收`eden/survivor`一旦`eden`区被占满，新生代GC就会启动。新生代GC只处理`eden`和`survivor`区，回收后，所有`eden`区都应该被清空，而`survivor`区会被收集一部分数据，但是应该至少仍然存在一个`survivor`区，类比其它的新生代回收器，这点似乎并没有太大变化，另一个重要的变化是老年代的区域增多，因为部分`survivor`或者`eden`区的对象可能会晋升到老年代。
+
+* 并发标记周期
+
+* 混合收集
+
+* 如果需要，可能会进行Full GC
+
+* 重要参数：
+
+  * `-XX:+UseG1GC`，启用G1回收器
+  * `-XX:MaxGCPauseMillis`指定目标最大停顿时间
+  * `-XX:ParallelGCThreads`设置并行回收时，GC的工作线程数量
+  * `-XX:InitiatingHeapOccupancyPercent`，参数可以指定当整个堆使用率达到多少时，触发并行标记周期的执行。默认值为45，即当整个堆占用率达到45%时，执行并发标记周期。`InitiatingHeapOccupancyPercent`一旦设置，始终都不会被G1收集器修改，这意味着G1收集器不会试图改变这个值，来满足`MaxGCPauseMillis`的目标。如果`InitiatingHeapOccupancyPercent`值设置过大，会导致并发周期迟迟得不到启动，那么引起Full GC的可能性也大大增加，反之，一个过小的`InitiatingHeapOccupancyPercent`值，会使得并发周期非常频繁，大量GC线程抢占CPU，会导致应用程序的性能有所下降。
 
   
+
 
 
 
